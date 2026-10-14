@@ -1,193 +1,44 @@
-(() => {
-  'use strict';
-  const $ = id => document.getElementById(id);
-  const GLYPHS = { wk:'♔', wq:'♕', wr:'♖', wb:'♗', wn:'♘', wp:'♙', bk:'♚', bq:'♛', br:'♜', bb:'♝', bn:'♞', bp:'♟' };
-  let game = null, mode = 'computer', level = 'easy', flipped = false;
-  let selected = null, legalMoves = [], lastMove = null, thinking = false;
-  let peer = null, connection = null, myColor = 'w', promotion = null, toastTimer = null;
-  const isOnline = () => mode === 'host' || mode === 'join';
-
-  function toast(message) {
-    $('toast').textContent = message;
-    $('toast').classList.add('show');
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => $('toast').classList.remove('show'), 2400);
-  }
-  function pieceName(type) { return ({k:'king',q:'queen',r:'rook',b:'bishop',n:'knight',p:'pawn'})[type] || type; }
-  function escapeHtml(value) { return String(value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
-
-  function initGame() {
-    if (typeof window.Chess !== 'function') {
-      $('statusText').textContent = 'Chess rules library failed to load';
-      $('statusNote').textContent = 'Check your internet connection and reload the page.';
-      return;
-    }
-    game = new Chess(); selected = null; legalMoves = []; lastMove = null; thinking = false;
-    renderBoard(); updateUI();
-  }
-
-  function renderBoard() {
-    if (!game) return;
-    const board = $('board'); board.innerHTML = '';
-    const position = game.board();
-    const files = flipped ? ['h','g','f','e','d','c','b','a'] : ['a','b','c','d','e','f','g','h'];
-    const ranks = flipped ? [1,2,3,4,5,6,7,8] : [8,7,6,5,4,3,2,1];
-    for (const rank of ranks) for (const file of files) {
-      const square = file + rank, piece = position[8-rank][file.charCodeAt(0)-97];
-      const cell = document.createElement('button');
-      cell.type = 'button'; cell.className = 'square ' + (((file.charCodeAt(0)-97)+(rank-1))%2===0?'light':'dark');
-      cell.dataset.square = square; cell.setAttribute('role','gridcell');
-      cell.setAttribute('aria-label', square + (piece ? ', '+(piece.color==='w'?'white ':'black ')+pieceName(piece.type) : ', empty'));
-      if (lastMove && (lastMove.from===square || lastMove.to===square)) cell.classList.add('last');
-      if (selected===square) cell.classList.add('selected');
-      if (legalMoves.some(move=>move.to===square)) cell.classList.add(piece?'capture':'legal');
-      if ((file==='a'&&!flipped)||(file==='h'&&flipped)) { const c=document.createElement('span'); c.className='coordinate'; c.textContent=rank; cell.append(c); }
-      if ((rank===1&&!flipped)||(rank===8&&flipped)) { const c=document.createElement('span'); c.className='coordinate'; c.style.cssText='left:auto;top:auto;right:4px;bottom:3px'; c.textContent=file; cell.append(c); }
-      if (piece) { const p=document.createElement('span'); p.className='piece '+(piece.color==='w'?'white':'black'); p.textContent=GLYPHS[piece.color+piece.type]; p.setAttribute('aria-hidden','true'); cell.append(p); }
-      cell.addEventListener('click', () => handleSquare(square)); board.append(cell);
-    }
-  }
-
-  function handleSquare(square) {
-    if (!game || game.game_over() || thinking) return;
-    if (isOnline() && game.turn() !== myColor) { toast('Wait for your opponent to move.'); return; }
-    if (mode === 'computer' && game.turn() === 'b') return;
-    const piece = game.get(square);
-    const chosenMove = selected && legalMoves.find(move => move.to === square);
-    if (chosenMove) {
-      if (chosenMove.flags.includes('p')) { promotion = {from:selected,to:square}; showPromotionPicker(); return; }
-      makeMove({from:selected,to:square}); return;
-    }
-    if (piece && piece.color === game.turn()) {
-      selected = square; legalMoves = game.moves({square, verbose:true}); renderBoard();
-      $('boardHint').textContent = legalMoves.length ? legalMoves.length + ' legal move' + (legalMoves.length===1?'':'s') : 'No legal moves';
-    } else { selected = null; legalMoves=[]; renderBoard(); $('boardHint').textContent='Select a piece to see legal moves'; }
-  }
-
-  function makeMove(move) {
-    const result = game.move(move);
-    if (!result) { toast('That move is not legal.'); return; }
-    lastMove = {from:result.from,to:result.to}; selected=null; legalMoves=[];
-    renderBoard(); updateUI();
-    if (isOnline() && connection && connection.open) connection.send({type:'move', move:{from:result.from,to:result.to,promotion:result.promotion||'q'}});
-    if (mode==='computer' && game.turn()==='b' && !game.game_over()) makeComputerMove();
-    if (game.game_over()) announceEnd();
-  }
-
-  function moveScore(move) {
-    const values={p:100,n:320,b:330,r:500,q:900,k:20000};
-    let score = move.captured ? (values[move.captured]||0) : 0;
-    if (move.promotion) score += 800;
-    const x=move.to.charCodeAt(0)-97, y=Number(move.to[1])-1;
-    score += (7-Math.abs(3.5-x)-Math.abs(3.5-y))*4;
-    if (move.san && move.san.includes('+')) score += 35;
-    if (move.flags.includes('k') || move.flags.includes('q')) score += 24;
-    return score + Math.random()*12;
-  }
-
-  function makeComputerMove() {
-    thinking=true; updateUI();
-    setTimeout(() => {
-      if (!game || mode!=='computer' || game.game_over()) { thinking=false; return; }
-      const moves=game.moves({verbose:true});
-      if (!moves.length) { thinking=false; updateUI(); return; }
-      let chosen;
-      if (level==='easy') chosen=moves[Math.floor(Math.random()*moves.length)];
-      else {
-        moves.sort((a,b)=>moveScore(b)-moveScore(a));
-        const candidates=moves.slice(0,Math.min(level==='hard'?4:9,moves.length));
-        chosen=candidates[Math.floor(Math.random()*candidates.length)];
-      }
-      const played=game.move({from:chosen.from,to:chosen.to,promotion:'q'});
-      lastMove={from:played.from,to:played.to}; thinking=false;
-      renderBoard(); updateUI(); if(game.game_over()) announceEnd();
-    }, level==='hard'?650:420);
-  }
-
-  function showPromotionPicker() {
-    const extra=$('modalExtra');
-    extra.innerHTML='<div class="promotion-choices">'+['q','r','b','n'].map(type=>'<button type="button" data-promotion="'+type+'" aria-label="Promote to '+pieceName(type)+'">'+GLYPHS[game.turn()+type]+'</button>').join('')+'</div>';
-    $('modalTitle').textContent='Promote your pawn'; $('modalText').textContent='Choose the piece you want your pawn to become.';
-    $('modalCancel').classList.add('hidden'); $('modalConfirm').classList.add('hidden'); $('modalBack').classList.add('open');
-    extra.querySelectorAll('[data-promotion]').forEach(button => button.addEventListener('click', () => {
-      const type=button.dataset.promotion, move=promotion; promotion=null; closeModal(); makeMove({from:move.from,to:move.to,promotion:type});
-    }));
-  }
-
-  function openNewGameModal() {
-    $('modalTitle').textContent='Start a new game?'; $('modalText').textContent='Your current board and move history will be cleared.';
-    $('modalExtra').innerHTML=''; $('modalCancel').classList.remove('hidden'); $('modalConfirm').classList.remove('hidden');
-    $('modalConfirm').textContent='New game'; $('modalBack').classList.add('open');
-    $('modalConfirm').onclick=()=>{ closeModal(); if(isOnline()&&connection&&connection.open) connection.send({type:'restart'}); resetBoardKeepConnection(); };
-  }
-  function closeModal() { $('modalBack').classList.remove('open'); }
-  function resetBoardKeepConnection() { if(typeof window.Chess!=='function')return; game=new Chess(); selected=null;legalMoves=[];lastMove=null;thinking=false;renderBoard();updateUI();toast('A new game is ready.'); }
-
-  function updateUI() {
-    if (!game) return;
-    const turn=game.turn(), white=turn==='w';
-    $('turnBadge').textContent=game.game_over()?'GAME OVER':(white?'WHITE':'BLACK')+' TO MOVE';
-    $('bottomBadge').textContent=game.game_over()?'FINISHED':mode==='computer'?(white?'YOUR TURN':'COMPUTER TURN'):isOnline()?(turn===myColor?'YOUR TURN':'OPPONENT TURN'):'LOCAL GAME';
-    $('topName').textContent=mode==='computer'?'Computer · Black':isOnline()?(myColor==='w'?'Opponent · Black':'Opponent · White'):'Black pieces';
-    $('bottomName').textContent=mode==='computer'?'You · White':isOnline()?(myColor==='w'?'You · White':'You · Black'):'White pieces';
-    $('topDetail').textContent=mode==='computer'?'Browser opponent':isOnline()?'Online opponent':'Player two';
-    $('bottomDetail').textContent=mode==='computer'?'Playing as White':isOnline()?'Online match':mode==='local'?'Player one':'Playing as Black';
-    $('topAvatar').textContent=isOnline()&&myColor==='b'?'♙':'♟'; $('bottomAvatar').textContent=isOnline()&&myColor==='b'?'♟':'♙';
-    $('moveCounter').textContent='Move '+(Math.floor(game.history().length/2)+1);
-    $('historyCount').textContent=game.history().length+' PLIES';
-    $('undoBtn').disabled=isOnline()||game.history().length===0; $('hintBtn').disabled=isOnline()||game.game_over()||thinking;
-    const history=game.history({verbose:true}); let output='';
-    for(let i=0;i<history.length;i+=2) output+='<div class="move-row"><span class="move-number">'+(Math.floor(i/2)+1)+'.</span><span>'+escapeHtml(history[i].san)+'</span><span>'+(history[i+1]?escapeHtml(history[i+1].san):'')+'</span></div>';
-    $('moves').innerHTML=output||'<div class="empty-state">Your moves will appear here.</div>';
-    if(game.in_check()) { $('statusText').textContent=(white?'White':'Black')+' is in check'; $('statusNote').textContent='Protect your king or move it out of check.'; }
-    else if(game.game_over()) { $('statusText').textContent=game.in_checkmate()?'Checkmate':game.in_stalemate()?'Draw by stalemate':game.in_threefold_repetition()?'Draw by repetition':game.insufficient_material()?'Draw — insufficient material':'Game drawn'; $('statusNote').textContent='Start a new game whenever you are ready.'; }
-    else { $('statusText').textContent=thinking?'Computer is thinking…':(white?'White':'Black')+' to move'; $('statusNote').textContent=isOnline()?'Moves are sent to your opponent.':'A good game begins with one thoughtful move.'; }
-    $('connectionPill').textContent=isOnline()?(connection&&connection.open?'Online match':mode==='host'?'Host room':'Online mode'):thinking?'Thinking':'Ready to play';
-    $('statusTag').textContent=game.game_over()?'ENDED':isOnline()?'ONLINE':'LIVE';
-  }
-
-  function announceEnd() { updateUI(); toast(game.in_checkmate()?'Checkmate! '+(game.turn()==='w'?'Black':'White')+' wins.':'Game over — '+$('statusText').textContent+'.'); }
-  function disconnect() { if(connection){try{connection.close()}catch(e){} connection=null;} if(peer){try{peer.destroy()}catch(e){} peer=null;} }
-  function setMode(next) {
-    disconnect(); mode=next; myColor=next==='join'?'b':'w'; flipped=next==='join';
-    document.querySelectorAll('[data-mode]').forEach(button=>button.classList.toggle('active',button.dataset.mode===next));
-    $('onlinePanel').classList.toggle('hidden',!isOnline()); $('onlineAction').textContent=next==='host'?'Create room':'Join room';
-    $('onlineNote').textContent=next==='host'?'Create a room and share the code with your opponent.':'Enter the room code your friend shares.';
-    $('roomCode').readOnly=false; initGame();
-  }
-  function wireConnection() {
-    if(!connection)return;
-    connection.on('data',data=>{
-      if(!data)return;
-      if(data.type==='move'&&data.move){const move=game.move(data.move);if(move){lastMove={from:move.from,to:move.to};selected=null;legalMoves=[];renderBoard();updateUI();if(game.game_over())announceEnd();}}
-      else if(data.type==='restart'){resetBoardKeepConnection();toast('Your opponent started a new game.');}
-    });
-    connection.on('close',()=>{connection=null;$('onlineNote').textContent='Opponent disconnected. Create or join a room again.';$('connectionPill').textContent='Disconnected';toast('Opponent disconnected.');});
-    connection.on('error',()=>toast('Online connection interrupted.'));
-  }
-  function createRoom() {
-    if(typeof window.Peer!=='function'){toast('Online library did not load. Check your internet connection.');return;}
-    disconnect(); const room='amran-'+Math.random().toString(36).slice(2,8); peer=new Peer(room); $('onlineNote').textContent='Creating room…';
-    peer.on('open',id=>{$('roomCode').value=id;$('roomCode').readOnly=true;$('onlineNote').textContent='Room created. Copy the code and send it to your opponent. Waiting for them…';toast('Room ready — share the code.');});
-    peer.on('connection',conn=>{if(connection){conn.close();return;}connection=conn;myColor='w';flipped=false;wireConnection();$('onlineNote').textContent='Opponent connected! You are White.';renderBoard();updateUI();toast('Opponent connected.');});
-    peer.on('error',error=>{$('onlineNote').textContent='Could not create room ('+(error.type||'network error')+'). Try again.';toast('Could not create online room.');});
-  }
-  function joinRoom() {
-    if(typeof window.Peer!=='function'){toast('Online library did not load. Check your internet connection.');return;}
-    const room=$('roomCode').value.trim();if(!room){toast('Enter a room code first.');return;}
-    disconnect();peer=new Peer();$('onlineNote').textContent='Connecting to room…';
-    peer.on('open',()=>{connection=peer.connect(room,{reliable:true});connection.on('open',()=>{myColor='b';flipped=true;wireConnection();$('onlineNote').textContent='Connected! You are Black. Wait for White to move.';renderBoard();updateUI();toast('Joined the room.');});connection.on('error',()=>{$('onlineNote').textContent='Could not connect. Check the code and make sure your friend is hosting.';});});
-    peer.on('error',error=>{$('onlineNote').textContent='Connection failed ('+(error.type||'network error')+'). Check the room code.';toast('Unable to connect.');});
-  }
-
-  $('newBtn').addEventListener('click',openNewGameModal);
-  $('undoBtn').addEventListener('click',()=>{if(isOnline()||!game.history().length)return;game.undo();if(mode==='computer'&&game.turn()==='b'&&game.history().length)game.undo();lastMove=null;selected=null;legalMoves=[];renderBoard();updateUI();toast('Last move undone.');});
-  $('flipBtn').addEventListener('click',()=>{flipped=!flipped;renderBoard();});
-  $('hintBtn').addEventListener('click',()=>{if(!game||isOnline())return;const moves=game.moves({verbose:true});if(!moves.length)return;moves.sort((a,b)=>moveScore(b)-moveScore(a));const move=moves[0];selected=move.from;legalMoves=game.moves({square:selected,verbose:true});renderBoard();toast('Possible move: '+move.san+' — just a suggestion.');});
-  document.querySelectorAll('[data-mode]').forEach(button=>button.addEventListener('click',()=>setMode(button.dataset.mode)));
-  document.querySelectorAll('[data-level]').forEach(button=>button.addEventListener('click',()=>{level=button.dataset.level;document.querySelectorAll('[data-level]').forEach(other=>other.classList.toggle('active',other===button));toast('Difficulty set to '+level+'.');}));
-  $('onlineAction').addEventListener('click',()=>mode==='host'?createRoom():joinRoom());
-  $('copyRoomBtn').addEventListener('click',async()=>{const code=$('roomCode').value.trim();if(!code){toast('Create or enter a room code first.');return;}try{await navigator.clipboard.writeText(code);toast('Room code copied.');}catch(error){$('roomCode').select();toast('Room code selected — copy it manually.');}});
-  $('modalCancel').addEventListener('click',closeModal);$('modalBack').addEventListener('click',event=>{if(event.target===$('modalBack'))closeModal();});document.addEventListener('keydown',event=>{if(event.key==='Escape')closeModal();});
-  initGame();
+(()=>{'use strict';
+const $=id=>document.getElementById(id);const files='abcdefgh';const glyph={wk:'♔',wq:'♕',wr:'♖',wb:'♗',wn:'♘',wp:'♙',bk:'♚',bq:'♛',br:'♜',bb:'♝',bn:'♞',bp:'♟'};
+let game,mode='computer',level='easy',flipped=false,selected=null,legal=[],lastMove=null,thinking=false,peer=null,conn=null,myColor='w',toastTimer=0,soundOn=true,pendingPromotion=null,installPrompt=null,session={played:0,won:0,drawn:0,lost:0};
+try{session=Object.assign(session,JSON.parse(localStorage.getItem('lumaChessStats')||'{}'))}catch{}
+function toast(msg){const t=$('toast');if(!t)return;t.textContent=msg;t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),2600)}
+function saveStats(){try{localStorage.setItem('lumaChessStats',JSON.stringify(session))}catch{}updateStats()}
+function updateStats(){for(const [id,key] of [['statPlayed','played'],['statWon','won'],['statDrawn','drawn'],['statLost','lost']])if($(id))$(id).textContent=session[key]||0}
+function safe(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function squareIndex(s){return files.indexOf(s[0])+(Number(s[1])-1)*8}
+function currentBoard(){return game.board()}
+function pieceAt(sq){return game.get(sq)}
+function isOver(){return game.game_over()}
+function initGame(){if(!window.LumaChessCore){toast('Chess engine could not load. Refresh the page.');return}game=new LumaChessCore();selected=null;legal=[];lastMove=null;thinking=false;$('boardOverlay').classList.add('hidden');drawBoard();renderState()}
+function drawBoard(){if(!game)return;const root=$('board');root.innerHTML='';const board=currentBoard();const ranks=flipped?[1,2,3,4,5,6,7,8]:[8,7,6,5,4,3,2,1];const cols=flipped?[7,6,5,4,3,2,1,0]:[0,1,2,3,4,5,6,7];const checkSq=game.in_check()?findKing(game.turn()):null;
+for(const rank of ranks)for(const col of cols){const sq=files[col]+rank;const p=board[8-rank][col];const el=document.createElement('button');el.type='button';el.className='square '+((col+rank)%2===1?'dark':'light');el.dataset.square=sq;el.setAttribute('role','gridcell');el.setAttribute('aria-label',sq+(p?', '+(p.color==='w'?'white ':'black ')+pieceName(p.type):', empty'));if(lastMove&&(lastMove.from===sq||lastMove.to===sq))el.classList.add('last');if(selected===sq)el.classList.add('selected');if(checkSq===sq)el.classList.add('check-square');if(legal.some(m=>m.to===sq))el.classList.add(p?'capture':'legal');if((!flipped&&col===0)||(flipped&&col===7)){const c=document.createElement('span');c.className='coordinate';c.textContent=rank;el.appendChild(c)}if((!flipped&&rank===1)||(flipped&&rank===8)){const c=document.createElement('span');c.className='coordinate';c.style.cssText='left:auto;top:auto;right:4px;bottom:3px';c.textContent=files[col];el.appendChild(c)}if(p){const sp=document.createElement('span');sp.className='piece '+(p.color==='w'?'white':'black')+(lastMove&&lastMove.to===sq?' recent':'');sp.textContent=glyph[p.color+p.type];sp.setAttribute('aria-hidden','true');el.appendChild(sp)}el.addEventListener('click',()=>onSquare(sq));root.appendChild(el)}}
+function findKing(color){const b=currentBoard();for(let r=0;r<8;r++)for(let c=0;c<8;c++){const p=b[r][c];if(p&&p.type==='k'&&p.color===color)return files[c]+(8-r)}return null}
+function pieceName(t){return({k:'king',q:'queen',r:'rook',b:'bishop',n:'knight',p:'pawn'})[t]||t}
+function onSquare(sq){if(!game||isOver()||thinking)return;if(mode==='online'&&game.turn()!==myColor){toast('Wait for your opponent to move.');return}if(mode==='computer'&&game.turn()==='b')return;const p=pieceAt(sq);if(selected&&legal.some(m=>m.to===sq)){const move=legal.find(m=>m.to===sq);if(move.promotion){showPromotion(selected,sq);return}makeMove({from:selected,to:sq});return}if(p&&p.color===game.turn()){if(mode==='online'&&p.color!==myColor){toast('Choose one of your own pieces.');return}selected=sq;legal=game.moves({square:sq,verbose:true});drawBoard();$('boardHint').innerHTML='<span class="hint-dot"></span> '+legal.length+' legal move'+(legal.length===1?'':'s');}else{selected=null;legal=[];drawBoard();$('boardHint').innerHTML='<span class="hint-dot"></span> Tap a piece to reveal its legal moves'}}
+function showPromotion(from,to){pendingPromotion={from,to};$('modalTitle').textContent='Choose your promotion';$('modalText').textContent='Your pawn has reached the final rank. Which piece should it become?';$('modalExtra').innerHTML='<div class="promotion-choices">'+['q','r','b','n'].map(t=>'<button class="promotion-choice" type="button" data-promotion="'+t+'">'+glyph[game.turn()+t]+'<small>'+pieceName(t)+'</small></button>').join('')+'</div>';$('modalCancel').textContent='Cancel';$('modalConfirm').classList.add('hidden');$('modalBack').classList.add('open');$('modalExtra').querySelectorAll('[data-promotion]').forEach(btn=>btn.addEventListener('click',()=>{const promotion=btn.dataset.promotion;closeModal();if(pendingPromotion)makeMove({...pendingPromotion,promotion});pendingPromotion=null}))}
+function makeMove(move){const result=game.move(move);if(!result){toast('That move is not legal.');return}lastMove={from:result.from,to:result.to};selected=null;legal=[];if(soundOn)beep();drawBoard();renderState();if(mode==='online'&&conn&&conn.open)conn.send({type:'move',move:{from:result.from,to:result.to,promotion:result.promotion||'q'}});if(mode==='computer'&&game.turn()==='b'&&!isOver())botMove();if(isOver())finishGame()}
+function moveScore(m){const v={p:100,n:320,b:330,r:500,q:900,k:20000};let s=(m.captured?v[m.captured]||0:0)+(m.promotion?800:0);const x=m.to.charCodeAt(0)-97,y=Number(m.to[1])-1;s+=(3.5-Math.abs(3.5-x)+3.5-Math.abs(3.5-y))*3;if((m.san||'').includes('+'))s+=50;if(m.flags.includes('k')||m.flags.includes('q'))s+=20;return s+Math.random()*12}
+function botMove(){thinking=true;renderState();setTimeout(()=>{if(!game||mode!=='computer'||isOver()){thinking=false;return}let moves=game.moves({verbose:true});if(!moves.length){thinking=false;renderState();return}let chosen;if(level==='easy')chosen=moves[Math.floor(Math.random()*moves.length)];else{moves.sort((a,b)=>moveScore(b)-moveScore(a));const top=moves.slice(0,Math.min(level==='hard'?3:8,moves.length));chosen=top[Math.floor(Math.random()*top.length)]}const res=game.move({from:chosen.from,to:chosen.to,promotion:'q'});if(res)lastMove={from:res.from,to:res.to};thinking=false;drawBoard();renderState();if(isOver())finishGame()},level==='hard'?600:420)}
+function renderState(){if(!game)return;const turn=game.turn(),history=game.history({verbose:true}),isFinished=isOver();$('turnBadge')&&($('turnBadge').textContent=(turn==='w'?'WHITE':'BLACK')+' TO MOVE');$('topName').textContent=mode==='computer'?'Luma Bot':mode==='online'?(myColor==='w'?'Opponent · Black':'You · Black'):'Dark pieces';$('topDetail').textContent=mode==='computer'?'A little challenge':mode==='online'?'Online opponent':'Player two';$('topRating').textContent=mode==='computer'?({easy:'CHILL',medium:'FOCUSED',hard:'SHARP'}[level]):mode==='online'?'ONLINE':'LOCAL';$('bottomName').textContent=mode==='computer'?'You · White':mode==='online'?(myColor==='w'?'You · White':'Opponent · White'):'Light pieces';$('bottomDetail').textContent=mode==='computer'?'Take your time':mode==='online'?'Online match':'Player one';$('bottomBadge').innerHTML=isFinished?'GAME OVER':(mode==='computer'?(turn==='w'?'YOUR TURN':'BOT THINKING'):mode==='online'?(turn===myColor?'YOUR TURN':'OPPONENT TURN'):'LOCAL GAME');$('topClock').textContent='∞';$('bottomClock').textContent='∞';$('moveCounter').textContent='MOVE '+String(Math.floor(history.length/2)+1).padStart(2,'0');$('historyCount').textContent=Math.ceil(history.length/2)+' MOVES';$('sessionMoves').textContent=history.length;$('sessionCaptures').textContent=history.filter(m=>m.captured).length;$('sessionChecks').textContent=history.filter(m=>(m.san||'').includes('+')||(m.san||'').includes('#')).length;
+let rows='';for(let i=0;i<history.length;i+=2)rows+='<div class="move-row"><span>'+(i/2+1)+'.</span><span>'+safe(history[i].san)+'</span><span>'+(history[i+1]?safe(history[i+1].san):'')+'</span></div>';$('moves').innerHTML=rows||'<div class="empty-state"><span>♙</span><p>Your first move is waiting.</p></div>';
+let status=thinking?'Luma Bot is thinking…':turn==='w'?'White to move':'Black to move',note='Good games begin with one thoughtful move.';if(game.in_check()){status=(turn==='w'?'White':'Black')+' is in check';note='Protect your king or move it to safety.'}if(isFinished){status=game.in_checkmate()?'Checkmate':game.in_stalemate()?'Draw by stalemate':game.in_threefold_repetition()?'Draw by repetition':game.insufficient_material()?'Draw — insufficient material':'Draw by the 50-move rule';note='Every game teaches you something. Ready for another?'}$('statusText').textContent=status;$('statusNote').textContent=note;$('statusTag').innerHTML='<i></i> '+(isFinished?'FINISHED':mode==='online'?'ONLINE':'LIVE');$('statusOrb').classList.toggle('thinking',thinking);$('connectionPill').classList.toggle('offline',mode==='online'&&!(conn&&conn.open));$('connectionPill').querySelector('span:last-child').textContent=mode==='online'?(conn&&conn.open?'Online room':'Online setup'):thinking?'Thinking':'Ready to play';$('undoBtn').disabled=history.length===0||mode==='online'||thinking;$('hintBtn').disabled=isFinished||mode==='online'||thinking;$('difficultyWrap').classList.toggle('hidden',mode!=='computer');$('onlinePanel').classList.toggle('hidden',mode!=='host'&&mode!=='join');$('boardOverlay').classList.toggle('hidden',!isFinished);if(isFinished){$('overlayTitle').textContent=game.in_checkmate()?(turn==='w'?'Black wins':'White wins'):'Game drawn';$('overlayMessage').textContent=status+'. Well played.'}}
+function finishGame(){if(!game)return;const stats=JSON.parse(JSON.stringify(session));session.played++;if(game.in_checkmate()){const winner=game.turn()==='w'?'b':'w';if(mode==='computer'){if(winner==='w')session.won++;else session.lost++}else if(mode==='local')winner==='w'?session.won++:session.lost++}else session.drawn++;saveStats();renderState();toast(game.in_checkmate()?'Checkmate!': 'Game finished. Well played!');}
+function newGame(){disconnect();initGame();toast('A fresh board is ready')}
+function openNewModal(){pendingPromotion=null;$('modalTitle').textContent='A new chapter?';$('modalText').textContent='Start a fresh board and clear the current moves.';$('modalExtra').innerHTML='';$('modalCancel').textContent='Keep playing';$('modalConfirm').textContent='Start fresh ↗';$('modalConfirm').classList.remove('hidden');$('modalBack').classList.add('open');$('modalConfirm').onclick=()=>{closeModal();newGame()}}
+function closeModal(){$('modalBack').classList.remove('open')}
+function disconnect(){if(conn){try{conn.close()}catch{}conn=null}if(peer){try{peer.destroy()}catch{}peer=null}}
+function setMode(next){disconnect();mode=next;flipped=next==='join';myColor=next==='join'?'b':'w';document.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===next));$('onlineAction').textContent=next==='host'?'Create room ↗':'Join room ↗';$('onlineNote').textContent=next==='host'?'Create a room and share the code with your opponent.':'Enter the room code your friend shares.';initGame();renderState()}
+function ensurePeerScript(){return new Promise((resolve,reject)=>{if(window.Peer)return resolve();const s=document.createElement('script');s.src='https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';s.onload=()=>window.Peer?resolve():reject();s.onerror=reject;document.head.appendChild(s)})}
+async function hostRoom(){try{await ensurePeerScript()}catch{toast('Online library failed to load. Check your connection.');return}disconnect();const id='luma-'+Math.random().toString(36).slice(2,8);$('onlineNote').textContent='Creating room…';peer=new Peer(id);peer.on('open',room=>{$('roomCode').value=room;$('onlineNote').textContent='Room ready. Share this code and wait for your friend.';toast('Room created — share the code')});peer.on('connection',c=>{if(conn){c.close();return}conn=c;myColor='w';wireConnection();$('onlineNote').textContent='Opponent connected. You play White.';renderState();toast('Opponent connected')});peer.on('error',e=>{$('onlineNote').textContent='Could not create room ('+(e.type||'network error')+'). Try again.';toast('Room could not be created')})}
+async function joinRoom(){const room=$('roomCode').value.trim();if(!room){toast('Enter a room code first');return}try{await ensurePeerScript()}catch{toast('Online library failed to load. Check your connection.');return}disconnect();$('onlineNote').textContent='Connecting…';peer=new Peer();peer.on('open',()=>{conn=peer.connect(room,{reliable:true});conn.on('open',()=>{myColor='b';flipped=true;wireConnection();$('onlineNote').textContent='Connected. You play Black.';drawBoard();renderState();toast('Joined room')});conn.on('error',()=>{$('onlineNote').textContent='Could not connect. Check the code and ask your friend to host again.'})});peer.on('error',e=>{$('onlineNote').textContent='Connection failed ('+(e.type||'network error')+').';toast('Could not connect')})}
+function wireConnection(){if(!conn)return;conn.on('data',d=>{if(!d)return;if(d.type==='move'&&d.move){const r=game.move(d.move);if(r){lastMove={from:r.from,to:r.to};selected=null;legal=[];drawBoard();renderState();if(isOver())finishGame()}}else if(d.type==='restart'){initGame();toast('Opponent started a new game')}});conn.on('close',()=>{conn=null;$('onlineNote').textContent='Opponent disconnected. Recreate the room to play again.';renderState();toast('Opponent disconnected')})}
+function beep(){try{const C=window.AudioContext||window.webkitAudioContext;if(!C)return;const c=new C(),o=c.createOscillator(),g=c.createGain();o.type='sine';o.frequency.value=620;g.gain.value=.025;o.connect(g);g.connect(c.destination);o.start();o.stop(c.currentTime+.055);o.onended=()=>c.close()}catch{}}
+function pgnText(){const h=game.history({verbose:true});let out='[Event "LumaChess Local Game"]\n[Result "*"]\n\n';for(let i=0;i<h.length;i+=2)out+=(i/2+1)+'. '+h[i].san+(h[i+1]?' '+h[i+1].san:'')+' ';return out+'*'}
+async function copyText(text){try{await navigator.clipboard.writeText(text);toast('Copied to clipboard')}catch{const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();toast('Copied')}}
+$('newBtn').addEventListener('click',openNewModal);$('overlayNewBtn').addEventListener('click',openNewModal);$('modalCancel').addEventListener('click',closeModal);$('modalBack').addEventListener('click',e=>{if(e.target===$('modalBack'))closeModal()});document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();$('statsBackdrop').classList.remove('open')}});
+$('undoBtn').addEventListener('click',()=>{if(mode==='online'||!game.history().length)return;game.undo();if(mode==='computer'&&game.turn()==='b'&&game.history().length)game.undo();lastMove=null;selected=null;legal=[];drawBoard();renderState();toast('Last move undone')});$('flipBtn').addEventListener('click',()=>{flipped=!flipped;drawBoard()});$('hintBtn').addEventListener('click',()=>{if(!game||mode==='online'||isOver())return;const moves=game.moves({verbose:true});if(!moves.length)return;moves.sort((a,b)=>moveScore(b)-moveScore(a));const m=moves[0];selected=m.from;legal=game.moves({square:m.from,verbose:true});drawBoard();toast('Suggestion: '+m.san+' — your choice!')});$('resignBtn').addEventListener('click',()=>{if(isOver())return;$('modalTitle').textContent='Resign this game?';$('modalText').textContent='You can always start another game when you are ready.';$('modalExtra').innerHTML='';$('modalConfirm').textContent='Resign';$('modalConfirm').classList.remove('hidden');$('modalBack').classList.add('open');$('modalConfirm').onclick=()=>{closeModal();$('boardOverlay').classList.remove('hidden');$('overlayTitle').textContent='Game resigned';$('overlayMessage').textContent='Start another game when you are ready.';game._resigned=true;toast('Game resigned')}});
+document.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('click',()=>setMode(b.dataset.mode)));document.querySelectorAll('[data-level]').forEach(b=>b.addEventListener('click',()=>{level=b.dataset.level;document.querySelectorAll('[data-level]').forEach(x=>x.classList.toggle('active',x===b));toast('Bot style: '+b.textContent.trim())}));$('onlineAction').addEventListener('click',()=>mode==='host'?hostRoom():joinRoom());$('copyRoomBtn').addEventListener('click',()=>{const c=$('roomCode').value.trim();if(c)copyText(c);else toast('Create or enter a room code first')});$('copyPgnBtn').addEventListener('click',()=>copyText(pgnText()));$('soundBtn').addEventListener('click',()=>{soundOn=!soundOn;$('soundBtn').textContent=soundOn?'♪':'♫̸';$('soundBtn').setAttribute('aria-pressed',String(soundOn));toast(soundOn?'Move sounds enabled':'Move sounds muted')});$('profileBtn').addEventListener('click',()=>{$('statsBackdrop').classList.add('open');updateStats()});$('closeStats').addEventListener('click',()=>$('statsBackdrop').classList.remove('open'));$('statsBackdrop').addEventListener('click',e=>{if(e.target===$('statsBackdrop'))$('statsBackdrop').classList.remove('open')});$('resetStatsBtn').addEventListener('click',()=>{session={played:0,won:0,drawn:0,lost:0};saveStats();toast('Local stats reset')});
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e;$('installBtn').classList.remove('hidden')});$('installBtn').addEventListener('click',async()=>{if(!installPrompt){toast('Use your browser menu and choose Install app / Add to Home Screen.');return}installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;$('installBtn').classList.add('hidden')});window.addEventListener('appinstalled',()=>toast('LumaChess installed!'));
+initGame();updateStats();
 })();

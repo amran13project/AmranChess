@@ -1,0 +1,7 @@
+{
+  "appId": "com.lumachess.game",
+  "appName": "LumaChess",
+  "webDir": ".",
+  "server": { "androidScheme": "https" },
+  "android": { "allowMixedContent": false }
+}
