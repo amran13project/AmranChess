@@ -1,0 +1,22 @@
+{
+  "name": "lumachess",
+  "version": "1.6.0",
+  "private": true,
+  "description": "LumaChess with Stockfish 19 browser engine, premium Aurora UI, named bots, puzzles and clocks",
+  "scripts": {
+    "android:add": "cap add android",
+    "android:sync": "cap sync android",
+    "android:open": "cap open android",
+    "android:build": "cap build android",
+    "serve": "http-server . -p 8080 -c-1",
+    "test": "node scripts/test-core.cjs"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.4.3",
+    "@capacitor/core": "^7.4.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.4.3",
+    "http-server": "^14.1.1"
+  }
+}
