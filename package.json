@@ -1,14 +1,15 @@
 {
   "name": "lumachess",
-  "version": "1.0.0",
+  "version": "1.4.0",
   "private": true,
-  "description": "LumaChess progressive web chess game and Android wrapper scaffold",
+  "description": "LumaChess chess game with named bots, focus mode, puzzles, clocks and themes",
   "scripts": {
     "android:add": "cap add android",
     "android:sync": "cap sync android",
     "android:open": "cap open android",
     "android:build": "cap build android",
-    "serve": "http-server . -p 8080 -c-1"
+    "serve": "http-server . -p 8080 -c-1",
+    "test": "node scripts/test-core.cjs"
   },
   "dependencies": {
     "@capacitor/android": "^7.4.3",

@@ -1,48 +1,59 @@
-# LumaChess
+# LumaChess 1.4.0
 
-**A quiet mind wins games.** LumaChess is a mobile-friendly chess web app with an animated interface, a built-in lightweight chess rules engine, local play, and a Progressive Web App (PWA) shell.
+**Make every move matter.** LumaChess is a responsive, installable chess web app with a compact custom rules engine, four local bot personalities, daily mate-in-one puzzles, chess clocks, custom board colours, and game export tools.
 
-## Features in this project
-- Responsive desktop and mobile layout with subtle motion and reduced-motion support.
-- Interactive board, legal-move highlighting, check indication, move history, promotion choice, undo, flip board, hint, and game status.
-- Play against a lightweight browser bot with three styles, or pass-and-play on one device.
-- Session stats stored locally in this browser.
-- Installable PWA metadata, app icons, and a basic offline shell cache.
-- Experimental peer-to-peer rooms. They depend on PeerJS's public signalling service and network conditions; they are not a guaranteed online service.
-- Capacitor configuration and scripts to create an Android Studio project.
+## What's included
 
-## Test locally
-The app uses local HTML, CSS, JavaScript and `chess-core.js`. For full PWA behaviour, serve it over `localhost` or HTTPS. You can use any static file server. With Node.js installed:
+- **Four named opponents:** Milo (Easy), Nova (Medium), Rook (Hard), and Shadow (Expert). Shadow evaluates a shortlist and looks one reply ahead. These are simple local heuristics, not separately trained AI models, Stockfish, or official rating levels.
+- **Play styles:** play against a bot or pass-and-play on one device. Experimental room hosting/joining is included through PeerJS, but it depends on internet access and a public signalling service.
+- **Board interaction:** drag-and-drop with mouse or touch, tap-to-select fallback, legal destination hints, move/capture animations, last-move highlights, check indication, board flipping, promotion choice, and reduced-motion support.
+- **Tactical practice:** three built-in mate-in-one puzzles. The puzzle rotates by UTC date and can be changed with **Next puzzle**. Completed puzzles are remembered locally.
+- **Chess clocks:** untimed, 3+2, 5-minute, and 10-minute settings for bot and local games. A chosen control applies to the next game. Online rooms and puzzles stay untimed because their clock state is not synchronised.
+- **Appearance and settings:** Classic, Ocean, Orchid, and Forest board themes, saved locally; sound preference saved locally.
+- **Game tools:** legal-move hints, undo, move history, capture/check counters, locally stored session stats, copy PGN, download PGN, and copy the current FEN position.
+- **PWA support:** app manifest, icons, install prompt, offline app-shell caching, and cache-version updates.
+- **Android wrapper setup:** Capacitor configuration and npm scripts are included. This is source code, not a signed APK/AAB.
+
+## Test the chess rules core
+
+Node.js is required for these source tests; no extra test framework is installed.
+
+```bash
+npm test
+```
+
+The test script checks starting legal moves, alternating turns, undo/reset, malformed and valid FEN, castling, en passant, promotion, and the three puzzle solutions. It does **not** replace independent chess-engine conformance testing or browser/device QA.
+
+## Run locally
+
+With Node.js available:
 
 ```bash
 npm install
 npm run serve
 ```
 
-Then open `http://localhost:8080`.
+Open `http://localhost:8080`. The app is plain HTML/CSS/JavaScript and works without installing an AI model. Google Fonts and PeerJS are external network dependencies; the core local game and bots need no chess service.
 
-## Publish as a website on GitHub Pages
-1. Upload the contents of this folder to the **root** of your GitHub repository (the `index.html` file must be at the root).
-2. In repository **Settings → Pages**, select **GitHub Actions** or configure `main` + `/(root)` as the source.
-3. Wait for the deployment to finish and open the repository's Pages URL.
+You can also serve the folder with any static HTTP server. For PWA install/offline functionality, use `localhost` or HTTPS rather than opening `index.html` directly as a file.
 
-## Android app / Google Play preparation
-This ZIP is a web app plus a Capacitor wrapper configuration; it is **not yet a signed Android APK/AAB** and has not been submitted to Google Play.
+## Publish on GitHub Pages
 
-Requirements: Node.js, Android Studio, Android SDK, a compatible JDK, and a Google Play Console developer account for publication.
+1. Put the project files at the repository root, with `index.html` at the root.
+2. Ensure GitHub Pages is configured to deploy through **GitHub Actions**.
+3. Push/commit the files and wait for the Pages workflow to pass.
+4. Open the repository's GitHub Pages URL and refresh with `Ctrl+F5` if an older service-worker cache appears.
 
-1. Extract the ZIP.
-2. Open a terminal in this folder and run `npm install`.
-3. Run `npm run android:add` to generate the native `android/` project.
-4. Run `npm run android:sync` and `npm run android:open`.
-5. In Android Studio, test on a real device/emulator, set app icon/version/privacy details, and fix any platform-specific issues.
-6. Use Android Studio's **Build → Generate Signed Bundle / APK** to create a signed Android App Bundle (`.aab`). Keep the signing key safe.
-7. Create the Play Console listing, privacy policy, screenshots, content rating, data safety form and testing track; submit the signed bundle for Google's review.
+The included workflow uploads this repository as a static site. If your repository already contains a Pages workflow that works, keep one deployment workflow rather than running duplicate workflows.
 
-The Play Store may require account verification and testing requirements that depend on your developer account. Uploading a ZIP to GitHub alone does not publish an Android app.
+## Android / Google Play status
 
-## Honest limitations
-- The bot is a small heuristic opponent, not Stockfish and not tournament-strength AI.
-- Online play is experimental and peer-to-peer. There is no managed game server, accounts, ratings, matchmaking, moderation, or anti-cheat system.
-- The built-in rules engine is a compact project engine, not a substitute for full independent chess-engine conformance testing. Test castling, en passant, repetition, promotion and checkmate carefully before public release.
-- No browser/device QA or Android build has been completed in this packaging environment. Treat this as a testable project starter, not a production-certified release.
+This repository has a Capacitor wrapper configuration, but **it does not contain a built, signed Android APK/AAB and has not been submitted to Google Play**. Building for Android requires Node.js, Android Studio, an Android SDK and a compatible JDK. See `docs/PLAY-STORE-CHECKLIST.md` before attempting a store release.
+
+## Known limitations
+
+- The bot is a small JavaScript heuristic. Even Shadow is not tournament strength and may choose weak moves.
+- The included puzzle collection is small and local, not an online daily-puzzle feed.
+- Peer-to-peer rooms have no managed server, accounts, matchmaking, persistent rooms, synced clocks, anti-cheat, or guaranteed availability. Do not use them as a production multiplayer service.
+- The custom rules engine is compact project code. Test uncommon rule combinations and edge cases before presenting the app as tournament-grade.
+- Core rules tests have been run in Node.js. A full interactive browser/device test and Android build have not been completed in this environment.

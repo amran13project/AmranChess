@@ -12,6 +12,20 @@
       for(let f=0;f<8;f++){this._board[f]={type:back[f],color:'w'};this._board[8+f]={type:'p',color:'w'};this._board[48+f]={type:'p',color:'b'};this._board[56+f]={type:back[f],color:'b'}}
       this._turn='w';this._castling={w:{k:true,q:true},b:{k:true,q:true}};this._ep=-1;this._halfmove=0;this._fullmove=1;this._history=[];this._positions=[this._positionKey()];return true
     }
+    load_fen(fen){
+      if(typeof fen!=='string')return false;
+      const parts=fen.trim().split(/\s+/);if(parts.length<4)return false;
+      const rows=parts[0].split('/');if(rows.length!==8||!['w','b'].includes(parts[1]))return false;
+      const next=Array(64).fill(null),kings={w:0,b:0};
+      for(let row=0;row<8;row++){let file=0;for(const ch of rows[row]){if(/[1-8]/.test(ch)){file+=Number(ch);continue}if(!/[pnbrqkPNBRQK]/.test(ch)||file>7)return false;const color=ch===ch.toUpperCase()?'w':'b',type=ch.toLowerCase();next[(7-row)*8+file]={type,color};if(type==='k')kings[color]++;file++;}if(file!==8)return false;}
+      if(kings.w!==1||kings.b!==1)return false;
+      const rights=parts[2]==='-'?'':parts[2];if(/[^KQkq]/.test(rights)||new Set(rights).size!==rights.length)return false;
+      const ep=parts[3]==='-'?-1:sqToI(parts[3]);if(parts[3]!=='-'&&ep<0)return false;
+      const half=parts.length>4?Number(parts[4]):0,full=parts.length>5?Number(parts[5]):1;
+      if(!Number.isInteger(half)||half<0||!Number.isInteger(full)||full<1)return false;
+      this._board=next;this._turn=parts[1];this._castling={w:{k:rights.includes('K'),q:rights.includes('Q')},b:{k:rights.includes('k'),q:rights.includes('q')}};this._ep=ep;this._halfmove=half;this._fullmove=full;this._history=[];this._positions=[this._positionKey()];return true;
+    }
+    load(fen){return this.load_fen(fen)}
     turn(){return this._turn}
     board(){const rows=[];for(let r=7;r>=0;r--){const row=[];for(let f=0;f<8;f++){const p=this._board[r*8+f];row.push(p?{type:p.type,color:p.color}:null)}rows.push(row)}return rows}
     get(sq){const i=sqToI(sq),p=this._board[i];return p?{type:p.type,color:p.color}:null}

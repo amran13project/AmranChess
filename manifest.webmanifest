@@ -2,7 +2,7 @@
   "id": "./",
   "name": "LumaChess — Find Your Next Brilliant Move",
   "short_name": "LumaChess",
-  "description": "A calm, beautiful chess game. Play the bot or pass and play on one device.",
+  "description": "A chess playground with local bots, daily mate puzzles, clocks and custom board themes.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
