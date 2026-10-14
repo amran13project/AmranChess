@@ -14,7 +14,7 @@
 <div class="app-shell">
   <header class="topbar">
     <a class="brand" href="#home" aria-label="LumaChess home"><span class="brand-icon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M13 37 18 12l7 10 7-10 4 25H13Z" fill="currentColor"/><circle cx="24" cy="8" r="3" fill="currentColor"/><path d="M10 41h28" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg></span><span class="brand-copy"><strong>Luma<span>Chess</span></strong><small>PLAY IN YOUR OWN LIGHT</small></span></a>
-    <div class="topbar-actions"><span class="connection-pill" id="connectionPill"><i class="status-dot"></i><span>Ready to play</span></span><button class="icon-button" id="focusBtn" title="Focus mode" aria-label="Toggle focus mode" aria-pressed="false">◎</button><button class="icon-button" id="soundBtn" title="Toggle sound" aria-label="Toggle sound" aria-pressed="true">♪</button><button class="icon-button install-button hidden" id="installBtn" title="Install LumaChess" aria-label="Install LumaChess">↓</button><button class="avatar-button" id="profileBtn" aria-label="Session stats">LC</button></div>
+    <div class="topbar-actions"><span class="connection-pill" id="connectionPill"><i class="status-dot"></i><span>Ready to play</span></span><button class="icon-button" id="focusBtn" title="Focus mode" aria-label="Toggle focus mode" aria-pressed="false">◎</button><button class="icon-button" id="soundBtn" title="Toggle sound" aria-label="Toggle sound" aria-pressed="true">♪</button><button class="icon-button install-button hidden" id="installBtn" title="Install LumaChess" aria-label="Install LumaChess">↓</button><button class="auth-open-button" id="authOpenBtn" type="button">Log in <span>↗</span></button><button class="avatar-button" id="profileBtn" aria-label="Session stats">LC</button></div>
   </header>
 
   <main class="layout" id="home">
@@ -63,6 +63,19 @@
   </main>
 </div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="auth-backdrop hidden" id="authBackdrop" role="presentation">
+ <section class="auth-card" role="dialog" aria-modal="true" aria-labelledby="authTitle">
+  <button class="auth-close" id="authClose" type="button" aria-label="Close">×</button>
+  <div class="auth-brand-mark">♞</div><div class="auth-eyebrow">YOUR GAME. YOUR SPACE.</div>
+  <h2 id="authTitle">Welcome back.</h2><p class="auth-subtitle" id="authSubtitle">Sign in to your LumaChess profile.</p>
+  <div class="auth-tabs"><button class="auth-tab active" data-auth-mode="login" type="button">Log in</button><button class="auth-tab" data-auth-mode="register" type="button">Create account</button></div>
+  <form id="authForm"><label class="auth-label" for="authEmail">EMAIL</label><input class="auth-input" id="authEmail" type="email" autocomplete="email" placeholder="you@example.com" required maxlength="160"><label class="auth-label" for="authPassword">PASSWORD</label><input class="auth-input" id="authPassword" type="password" autocomplete="current-password" placeholder="At least 8 characters" required minlength="8" maxlength="128"><div class="auth-error" id="authError" role="status"></div><button class="auth-submit" type="submit" id="authSubmit">Log in <span>↗</span></button></form>
+  <div class="auth-divider"><span>OR CONTINUE LOCALLY</span></div><button class="auth-guest" id="authGuest" type="button">Continue as guest</button>
+  <p class="auth-privacy">Demo interface: real accounts and secure sign-in are not connected yet. Do not enter a real password. Guest play stays on this device.</p>
+ </section>
+</div>
+<script defer src="auth-ui.js"></script>
+
 <div class="modal-backdrop" id="modalBack"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><div class="modal-top-mark">✦</div><h2 id="modalTitle">A new chapter?</h2><p id="modalText">Start a fresh board and clear the current moves.</p><div id="modalExtra"></div><div class="modal-actions"><button class="button" id="modalCancel" type="button">Keep playing</button><button class="button button-primary" id="modalConfirm" type="button">Start fresh <span>↗</span></button></div></section></div>
 <div class="stats-drawer-backdrop" id="statsBackdrop"><section class="stats-drawer" role="dialog" aria-modal="true" aria-labelledby="statsTitle"><button class="icon-button close-drawer" id="closeStats" aria-label="Close session stats">×</button><span class="panel-kicker">YOUR JOURNEY</span><h2 id="statsTitle">Session stats</h2><p class="drawer-subtitle">A small snapshot of games played on this device.</p><div class="stat-grid"><div><strong id="statPlayed">0</strong><span>GAMES</span></div><div><strong id="statWon">0</strong><span>WON</span></div><div><strong id="statDrawn">0</strong><span>DRAWS</span></div><div><strong id="statLost">0</strong><span>LOST</span></div></div><button class="button button-primary full-width" id="resetStatsBtn" type="button">Reset local stats</button><p class="help-text">These stats are saved only in this browser. They are not an online account or official rating.</p></section></div>
 <script>if('serviceWorker'in navigator&&location.protocol.startsWith('http'))window.addEventListener('load',()=>navigator.serviceWorker.register('./service-worker.js').catch(()=>{}));</script>

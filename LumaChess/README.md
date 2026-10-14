@@ -58,3 +58,8 @@ This repository has a Capacitor wrapper configuration, but **it does not contain
 - Peer-to-peer rooms have no managed server, accounts, matchmaking, persistent rooms, synced clocks, anti-cheat, or guaranteed availability. Do not use them as a production multiplayer service.
 - The custom rules engine is compact project code. Test uncommon rule combinations and edge cases before presenting the app as tournament-grade.
 - Core rules tests have been run in Node.js. A full interactive browser/device test and Android build have not been completed in this environment.
+
+
+## Version 1.7.0 — Midnight Black
+- Premium black login/register interface and guest entry.
+- Important: login/register is a visual demo only; no backend authentication is connected. Never enter a real password. Guest play is local to this browser.

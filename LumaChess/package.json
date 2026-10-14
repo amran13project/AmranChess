@@ -1,8 +1,8 @@
 {
   "name": "lumachess",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "private": true,
-  "description": "LumaChess with Stockfish 19 browser engine, premium Aurora UI, named bots, puzzles and clocks",
+  "description": "LumaChess with Stockfish 19 browser engine, Midnight Black UI with login/register demo, named bots, puzzles and clocks",
   "scripts": {
     "android:add": "cap add android",
     "android:sync": "cap sync android",

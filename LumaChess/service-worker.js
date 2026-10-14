@@ -1,5 +1,5 @@
-const CACHE='lumachess-shell-v6';
-const SHELL=['./','./index.html','./styles.css','./app.js','./chess-core.js','./manifest.webmanifest','./assets/lumachess-icon.svg','./assets/lumachess-icon-192.png','./assets/lumachess-icon-512.png'];
+const CACHE='lumachess-shell-v7';
+const SHELL=['./','./index.html','./styles.css','./app.js','./auth-ui.js','./chess-core.js','./manifest.webmanifest','./assets/lumachess-icon.svg','./assets/lumachess-icon-192.png','./assets/lumachess-icon-512.png'];
 self.addEventListener('install',event=>{
   event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(SHELL)).then(()=>self.skipWaiting()));
 });
